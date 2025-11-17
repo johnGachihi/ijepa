@@ -2,7 +2,7 @@ data:
   dataset_name: sen2venus
   dataset_root: /home/user/data/sen2venus/sen2venus.hdf5
   splits_file_path: /home/user/data/sen2venus/splits_v1.json
-  use_hr_image: true  # true for HR (Venus) images, false for LR (Sentinel2) images
+  use_hr_image: false  # true for HR (Venus) images, false for LR (Sentinel2) images
   batch_size: 64
   color_jitter_strength: 0.0
   crop_scale:
@@ -16,8 +16,8 @@ data:
   use_gaussian_blur: false
   use_horizontal_flip: false
 logging:
-  folder: logs/sen2venus_vits14.224-bs.128-ep.100_hr/
-  write_tag: jepa_sen2venus
+  folder: logs/sen2venus_vits14.224-bs.128-ep.100_lr/
+  write_tag: jepa_sen2venus_lr
 mask:
   allow_overlap: false
   aspect_ratio:
