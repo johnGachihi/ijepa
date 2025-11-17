@@ -69,3 +69,17 @@ def repeat_interleave_batch(x, B, repeat):
         for i in range(N)
     ], dim=0)
     return x
+
+
+def to2tuple(x):
+    """Convert input to 2-element tuple"""
+    if isinstance(x, (tuple, list)):
+        if len(x) == 1:
+            return (x[0], x[0])
+        elif len(x) == 2:
+            return tuple(x)
+        else:
+            raise ValueError(f"Expected 1 or 2 elements, got {len(x)}")
+    else:
+        # Assume it's a scalar (int, float)
+        return (x, x)

@@ -42,6 +42,7 @@ from src.utils.logging import (
     AverageMeter)
 from src.utils.tensors import repeat_interleave_batch
 from src.datasets.imagenet1k import make_imagenet1k
+from src.datasets.sen2venus import make_sen2venus_dataloader
 
 from src.helper import (
     load_checkpoint,
@@ -93,10 +94,20 @@ def main(args, resume_preempt=False):
     batch_size = args['data']['batch_size']
     pin_mem = args['data']['pin_mem']
     num_workers = args['data']['num_workers']
-    root_path = args['data']['root_path']
-    image_folder = args['data']['image_folder']
     crop_size = args['data']['crop_size']
     crop_scale = args['data']['crop_scale']
+    # -- dataset specific
+    dataset_name = args['data'].get('dataset_name', 'imagenet1k')
+    if dataset_name == 'imagenet1k':
+        root_path = args['data']['root_path']
+        image_folder = args['data']['image_folder']
+        in_chans = 3  # RGB images
+    elif dataset_name == 'sen2venus':
+        dataset_root = args['data']['dataset_root']
+        splits_file_path = args['data']['splits_file_path']
+        use_hr_image = args['data'].get('use_hr_image', True)
+        hr_crop_size = args['data'].get('hr_crop_size', None)
+        in_chans = 4  # RGB + NIR images
     # --
 
     # -- MASK
@@ -165,7 +176,8 @@ def main(args, resume_preempt=False):
         crop_size=crop_size,
         pred_depth=pred_depth,
         pred_emb_dim=pred_emb_dim,
-        model_name=model_name)
+        model_name=model_name,
+        in_chans=in_chans)
     target_encoder = copy.deepcopy(encoder)
 
     # -- make data transforms
@@ -180,28 +192,49 @@ def main(args, resume_preempt=False):
         allow_overlap=allow_overlap,
         min_keep=min_keep)
 
-    transform = make_transforms(
-        crop_size=crop_size,
-        crop_scale=crop_scale,
-        gaussian_blur=use_gaussian_blur,
-        horizontal_flip=use_horizontal_flip,
-        color_distortion=use_color_distortion,
-        color_jitter=color_jitter)
-
     # -- init data-loaders/samplers
-    _, unsupervised_loader, unsupervised_sampler = make_imagenet1k(
-            transform=transform,
-            batch_size=batch_size,
-            collator=mask_collator,
-            pin_mem=pin_mem,
-            training=True,
-            num_workers=num_workers,
-            world_size=world_size,
-            rank=rank,
-            root_path=root_path,
-            image_folder=image_folder,
-            copy_data=copy_data,
-            drop_last=True)
+    if dataset_name == 'imagenet1k':
+        transform = make_transforms(
+            crop_size=crop_size,
+            crop_scale=crop_scale,
+            gaussian_blur=use_gaussian_blur,
+            horizontal_flip=use_horizontal_flip,
+            color_distortion=use_color_distortion,
+            color_jitter=color_jitter)
+
+        _, unsupervised_loader, unsupervised_sampler = make_imagenet1k(
+                transform=transform,
+                batch_size=batch_size,
+                collator=mask_collator,
+                pin_mem=pin_mem,
+                training=True,
+                num_workers=num_workers,
+                world_size=world_size,
+                rank=rank,
+                root_path=root_path,
+                image_folder=image_folder,
+                copy_data=copy_data,
+                drop_last=True)
+
+    elif dataset_name == 'sen2venus':
+        _, unsupervised_loader, unsupervised_sampler = make_sen2venus_dataloader(
+                data_root=dataset_root,
+                splits_file_path=splits_file_path,
+                split='train',
+                img_size=crop_size,
+                hr_img_size=hr_crop_size,
+                use_hr_image=use_hr_image,
+                batch_size=batch_size,
+                collator=mask_collator,
+                drop_last=True,
+                pin_mem=pin_mem,
+                num_workers=num_workers,
+                world_size=world_size,
+                rank=rank)
+
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
+
     ipe = len(unsupervised_loader)
 
     # -- init optimizer and scheduler
