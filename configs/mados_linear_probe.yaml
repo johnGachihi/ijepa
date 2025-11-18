@@ -1,0 +1,29 @@
+data:
+  data_root: /home/user/data/mados
+  dataset_name: mados
+  batch_size: 64
+  crop_size: 112
+  num_workers: 8
+  pin_mem: true
+  drop_last: true
+logging:
+  folder: logs/eval/mados_linear_probe_pt
+  write_tag: mados_linear_probe_pt
+meta:
+  model_name: vit_small
+  patch_size: 14
+  load_checkpoint: false
+  read_checkpoint: null
+  pretrained_checkpoint: /home/user/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_hr/jepa_sen2venus-ep100.pth.tar
+  use_bfloat16: true
+  seg_n_cls: 15
+  use_batchnorm: false
+optimization:
+  epochs: 100
+  ipe_scale: 1.0
+  lr: 0.001
+  start_lr: 0.001  # 0.0001
+  final_lr: 1.0e-06
+  warmup: 10
+  weight_decay: 0.0
+  final_weight_decay: 0.0

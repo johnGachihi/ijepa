@@ -103,6 +103,37 @@ def paired_resize(hr_img, lr_img, size: Tuple[int, int], hr_img_size=None):
   return hr_img, lr_img
 
 
+def random_crop_resize_img_and_mask(
+    img, mask,
+    size: Tuple[int, int],
+    scale=(0.3, 1.0), ratio=(3 / 4, 4 / 3)
+):
+  """
+  Apply same random crop to both image and mask, then resize to target size
+  Mask is resized using nearest neighbor interpolation to preserve label values
+  """
+  i, j, h, w = T.RandomResizedCrop.get_params(img, scale=scale, ratio=ratio)
+
+  img = TF.crop(img, i, j, h, w)
+  mask = TF.crop(mask, i, j, h, w)
+
+  img = TF.resize(img, size)
+  mask = TF.resize(mask, size, interpolation=T.InterpolationMode.NEAREST)
+
+  return img, mask
+
+
+def resize_img_and_mask(img, mask, size: Tuple[int, int]):
+  """
+  Resize both image and mask to the target size
+  Mask is resized using nearest neighbor interpolation to preserve label values
+  """
+  img = TF.resize(img, size)
+  mask = TF.resize(mask, size, interpolation=T.InterpolationMode.NEAREST)
+
+  return img, mask
+
+
 class GaussianBlur(object):
     def __init__(self, p=0.5, radius_min=0.1, radius_max=2.):
         self.prob = p

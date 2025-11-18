@@ -1,0 +1,29 @@
+data:
+  data_root: /home/user/data/mados
+  dataset_name: mados
+  batch_size: 64
+  crop_size: 112
+  num_workers: 8
+  pin_mem: true
+logging:
+  folder: logs/eval/mados_finetune
+  write_tag: mados_finetune
+meta:
+  model_name: vit_small
+  patch_size: 14
+  load_checkpoint: false
+  read_checkpoint: null
+  pretrained_checkpoint: /path/to/pretrained/checkpoint.pth.tar  # Update this path
+  use_bfloat16: true
+  seg_n_cls: 15
+  use_batchnorm: false
+  eval_type: finetuning  # 'linear_probing' or 'finetuning'
+optimization:
+  epochs: 100
+  ipe_scale: 1.0
+  lr: 0.0001  # Lower learning rate for finetuning
+  start_lr: 0.00001  # Lower starting learning rate
+  final_lr: 1.0e-06
+  warmup: 10
+  weight_decay: 0.05  # Weight decay for finetuning
+  final_weight_decay: 0.05
