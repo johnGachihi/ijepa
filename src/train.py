@@ -30,7 +30,7 @@ import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel
 
 from src.masks.multiblock import MaskCollator as MBMaskCollator
-from src.masks.utils import apply_masks
+from src.masks.utils import apply_masks, scale_masks
 from src.utils.distributed import (
     init_distributed,
     AllReduce
@@ -47,7 +47,7 @@ from src.datasets.sen2venus import make_sen2venus_dataloader
 from src.helper import (
     load_checkpoint,
     init_model,
-    init_opt)
+    init_opt, init_hr_gram_teacher)
 from src.transforms import make_transforms
 
 # --
@@ -79,6 +79,7 @@ def main(args, resume_preempt=False):
     copy_data = args['meta']['copy_data']
     pred_depth = args['meta']['pred_depth']
     pred_emb_dim = args['meta']['pred_emb_dim']
+    use_hr_gram_loss = args['meta'].get('use_hr_gram_loss')
     if not torch.cuda.is_available():
         device = torch.device('cpu')
     else:
@@ -107,6 +108,7 @@ def main(args, resume_preempt=False):
         splits_file_path = args['data']['splits_file_path']
         use_hr_image = args['data'].get('use_hr_image', True)
         hr_crop_size = args['data'].get('hr_crop_size', None)
+        load_both_images = use_hr_gram_loss  # Load both images when using hr_gram_loss
         in_chans = 4  # RGB + NIR images
     # --
 
@@ -179,6 +181,15 @@ def main(args, resume_preempt=False):
         model_name=model_name,
         in_chans=in_chans)
     target_encoder = copy.deepcopy(encoder)
+    hr_gram_teacher = None
+    if use_hr_gram_loss:
+        hr_gram_teacher = init_hr_gram_teacher(
+            device=device,
+            model_name=model_name,
+            patch_size=patch_size,
+            crop_size=hr_crop_size,  # Note: hr_crop_size not crop_size
+            in_chans=in_chans
+        )
 
     # -- make data transforms
     mask_collator = MBMaskCollator(
@@ -224,6 +235,7 @@ def main(args, resume_preempt=False):
                 img_size=crop_size,
                 hr_img_size=hr_crop_size,
                 use_hr_image=use_hr_image,
+                load_both_images=load_both_images,
                 batch_size=batch_size,
                 collator=mask_collator,
                 drop_last=True,
@@ -256,6 +268,15 @@ def main(args, resume_preempt=False):
     target_encoder = DistributedDataParallel(target_encoder)
     for p in target_encoder.parameters():
         p.requires_grad = False
+    if use_hr_gram_loss:
+        hr_gram_teacher = DistributedDataParallel(hr_gram_teacher)
+        for p in hr_gram_teacher.parameters():
+            p.requires_grad = False
+        # Initialize hr_gram_teacher with encoder parameters (skip pos_embed)
+        encoder_state = encoder.module.state_dict()
+        encoder_state = {k: v for k, v in encoder_state.items() if 'pos_embed' not in k}
+        hr_gram_teacher.module.load_state_dict(encoder_state, strict=False)
+
 
     # -- momentum schedule
     momentum_scheduler = (ema[0] + i*(ema[1]-ema[0])/(ipe*num_epochs*ipe_scale)
@@ -270,6 +291,7 @@ def main(args, resume_preempt=False):
             encoder=encoder,
             predictor=predictor,
             target_encoder=target_encoder,
+            hr_gram_teacher=hr_gram_teacher,
             opt=optimizer,
             scaler=scaler)
         for _ in range(start_epoch*ipe):
@@ -283,6 +305,7 @@ def main(args, resume_preempt=False):
             'encoder': encoder.state_dict(),
             'predictor': predictor.state_dict(),
             'target_encoder': target_encoder.state_dict(),
+            'hr_gram_teacher': None if hr_gram_teacher is None else hr_gram_teacher.state_dict(),
             'opt': optimizer.state_dict(),
             'scaler': None if scaler is None else scaler.state_dict(),
             'epoch': epoch,
@@ -304,6 +327,9 @@ def main(args, resume_preempt=False):
         unsupervised_sampler.set_epoch(epoch)
 
         loss_meter = AverageMeter()
+        if use_hr_gram_loss:
+            ijepa_loss_meter = AverageMeter()
+            gram_loss_meter = AverageMeter()
         maskA_meter = AverageMeter()
         maskB_meter = AverageMeter()
         time_meter = AverageMeter()
@@ -312,11 +338,17 @@ def main(args, resume_preempt=False):
 
             def load_imgs():
                 # -- unsupervised imgs
-                imgs = udata[0].to(device, non_blocking=True)
+                if use_hr_gram_loss:
+                    imgs = udata[1].to(device, non_blocking=True)
+                    hr_imgs = udata[0].to(device, non_blocking=True)
+                else:
+                    imgs = udata[0].to(device, non_blocking=True)
+                    hr_imgs = None
+
                 masks_1 = [u.to(device, non_blocking=True) for u in masks_enc]
                 masks_2 = [u.to(device, non_blocking=True) for u in masks_pred]
-                return (imgs, masks_1, masks_2)
-            imgs, masks_enc, masks_pred = load_imgs()
+                return (imgs, hr_imgs, masks_1, masks_2)
+            imgs, hr_imgs, masks_enc, masks_pred = load_imgs()
             maskA_meter.update(len(masks_enc[0][0]))
             maskB_meter.update(len(masks_pred[0][0]))
 
@@ -335,21 +367,90 @@ def main(args, resume_preempt=False):
                         h = repeat_interleave_batch(h, B, repeat=len(masks_enc))
                         return h
 
-                def forward_context():
-                    z = encoder(imgs, masks_enc)
-                    z = predictor(z, masks_enc, masks_pred)
-                    return z
+                def forward_hr_gram_teacher():
+                    with torch.no_grad():
+                        masks_enc_hr = scale_masks(masks_enc, crop_size, hr_crop_size, patch_size)
+                        k = hr_gram_teacher(hr_imgs, masks_enc_hr)
+                        return k
 
-                def loss_fn(z, h):
-                    loss = F.smooth_l1_loss(z, h)
-                    loss = AllReduce.apply(loss)
-                    return loss
+                def forward_context():
+                    ctx_emb = encoder(imgs, masks_enc)
+                    z = predictor(ctx_emb, masks_enc, masks_pred)
+                    return z, ctx_emb
+
+                def gram_loss_fn(z, k):
+                    # Downscale k (hr gram teacher output) to match z size using bilinear interpolation
+                    if imgs.shape[-1] != hr_imgs.shape[-1]:
+                        # k has shape [B, 4*N, D]; downscale to [B, N, D]
+                        B, num_patches, D = k.shape
+                        scale_factor = hr_crop_size // crop_size  # HR to LR scale factor
+                        N = num_patches // (scale_factor ** 2)
+
+                        # Reshape to (B, N, scale_factor, scale_factor, D)
+                        k_reshaped = k.reshape(B, N, scale_factor, scale_factor, D)
+
+                        # Reshape to (B, N, D, scale_factor, scale_factor) for interpolation
+                        k_reshaped = k_reshaped.permute(0, 1, 4, 2, 3)
+
+                        # Reshape to (B*N, D, scale_factor, scale_factor) for interpolation
+                        k_reshaped = k_reshaped.reshape(B * N, D, scale_factor, scale_factor)
+
+                        # Apply bilinear interpolation to downscale 2x2 → 1x1
+                        k_interp = torch.nn.functional.interpolate(
+                            k_reshaped,
+                            size=(1, 1),
+                            mode='bilinear',
+                            align_corners=False
+                        )
+
+                        # Reshape back to (B, N, D)
+                        k = k_interp.reshape(B, N, D)
+
+                    output_feats = z.float()
+                    target_feats = k.float()
+
+                    if True:  # self.apply_norm:
+                        target_feats = F.normalize(target_feats, dim=-1)
+
+                    # Compute similarities
+                    target_sim = torch.matmul(target_feats, target_feats.transpose(-1, -2))
+
+                    # Patch correlation
+                    if True:  # self.apply_norm:
+                        output_feats = F.normalize(z, dim=-1)
+
+                    # Compute similarities
+                    student_sim = torch.matmul(output_feats, output_feats.transpose(-1, -2))
+
+                    # TODO: consider testing these hparams
+                    # if False:  # self.remove_neg:
+                    #     target_sim[target_sim < 0] = 0.0
+                    #     student_sim[student_sim < 0] = 0.0
+                    # elif False:  # self.remove_only_teacher_neg:
+                    #     # Remove only the negative sim values of the teacher
+                    #     target_sim[target_sim < 0] = 0.0
+                    #     student_sim[(student_sim < 0) & (target_sim < 0)] = 0.0
+
+                    return F.mse_loss(student_sim, target_sim)
+
+                def loss_fn(z, h, ctx_emb, k):
+                    if use_hr_gram_loss:
+                        ijepa_loss = F.smooth_l1_loss(z, h)
+                        gram_loss = gram_loss_fn(ctx_emb, k)
+                        loss = ijepa_loss + gram_loss
+                        loss = AllReduce.apply(loss)
+                        return loss, ijepa_loss, gram_loss
+                    else:
+                        loss = F.smooth_l1_loss(z, h)
+                        return loss, 0.0, 0.0
 
                 # Step 1. Forward
                 with torch.cuda.amp.autocast(dtype=torch.bfloat16, enabled=use_bfloat16):
                     h = forward_target()
-                    z = forward_context()
-                    loss = loss_fn(z, h)
+                    if use_hr_gram_loss:
+                        k = forward_hr_gram_teacher()
+                    z, ctx_emb = forward_context()
+                    loss, ijepa_loss, gram_loss = loss_fn(z, h, ctx_emb, k)
 
                 #  Step 2. Backward & step
                 if use_bfloat16:
@@ -362,15 +463,31 @@ def main(args, resume_preempt=False):
                 grad_stats = grad_logger(encoder.named_parameters())
                 optimizer.zero_grad()
 
-                # Step 3. momentum update of target encoder
+                # Step 3. momentum update of target encoder and hr gram teacher
                 with torch.no_grad():
                     m = next(momentum_scheduler)
+
+                    # target encoder
                     for param_q, param_k in zip(encoder.parameters(), target_encoder.parameters()):
                         param_k.data.mul_(m).add_((1.-m) * param_q.detach().data)
 
-                return (float(loss), _new_lr, _new_wd, grad_stats)
-            (loss, _new_lr, _new_wd, grad_stats), etime = gpu_timer(train_step)
+                    # hr gram teacher - only update layers, skip pos_embed
+                    if use_hr_gram_loss:
+                        encoder_params = dict(encoder.module.named_parameters())
+                        hr_gram_params = dict(hr_gram_teacher.module.named_parameters())
+
+                        for name, param_q in encoder_params.items():
+                            if name in hr_gram_params and 'pos_embed' not in name:
+                                param_k = hr_gram_params[name]
+                                param_k.data.mul_(m).add_((1. - m) * param_q.detach().data)
+
+
+                return (float(loss), float(ijepa_loss), float(gram_loss), _new_lr, _new_wd, grad_stats)
+            (loss, ijepa_loss, gram_loss, _new_lr, _new_wd, grad_stats), etime = gpu_timer(train_step)
             loss_meter.update(loss)
+            if use_hr_gram_loss:
+                ijepa_loss_meter.update(ijepa_loss)
+                gram_loss_meter.update(gram_loss)
             time_meter.update(etime)
 
             # -- Logging
@@ -378,12 +495,16 @@ def main(args, resume_preempt=False):
                 csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime)
                 if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
                     logger.info('[%d, %5d] loss: %.3f '
+                                'ijepa loss: %.3f '
+                                'gram loss: %.3f '
                                 'masks: %.1f %.1f '
                                 '[wd: %.2e] [lr: %.2e] '
                                 '[mem: %.2e] '
                                 '(%.1f ms)'
                                 % (epoch + 1, itr,
                                    loss_meter.avg,
+                                   ijepa_loss_meter.avg,
+                                   gram_loss_meter.avg,
                                    maskA_meter.avg,
                                    maskB_meter.avg,
                                    _new_wd,

@@ -27,6 +27,7 @@ def load_checkpoint(
     encoder,
     predictor,
     target_encoder,
+    hr_gram_teacher,
     opt,
     scaler,
 ):
@@ -42,14 +43,20 @@ def load_checkpoint(
         # -- loading predictor
         pretrained_dict = checkpoint['predictor']
         msg = predictor.load_state_dict(pretrained_dict)
-        logger.info(f'loaded pretrained encoder from epoch {epoch} with msg: {msg}')
+        logger.info(f'loaded pretrained predictor from epoch {epoch} with msg: {msg}')
 
         # -- loading target_encoder
         if target_encoder is not None:
             print(list(checkpoint.keys()))
             pretrained_dict = checkpoint['target_encoder']
             msg = target_encoder.load_state_dict(pretrained_dict)
-            logger.info(f'loaded pretrained encoder from epoch {epoch} with msg: {msg}')
+            logger.info(f'loaded pretrained target encoder from epoch {epoch} with msg: {msg}')
+
+        # -- loading hr_gram_teacher
+        if hr_gram_teacher is not None:
+            pretrained_dict = checkpoint['hr_gram_teacher']
+            msg = hr_gram_teacher.load_state_dict(pretrained_dict)
+            logger.info(f'loaded pretrained hr gram teacher from epoch {epoch} with msg: {msg}')
 
         # -- loading optimizer
         opt.load_state_dict(checkpoint['opt'])
@@ -105,6 +112,34 @@ def init_model(
     predictor.to(device)
     logger.info(encoder)
     return encoder, predictor
+
+def init_hr_gram_teacher(
+    device,
+    patch_size=16,
+    model_name='vit_base',
+    crop_size=224,
+    in_chans=3
+):
+    hr_gram_teacher = vit.__dict__[model_name](
+        img_size=[crop_size],
+        patch_size=patch_size,
+        in_chans=in_chans)
+
+    def init_weights(m):
+        if isinstance(m, torch.nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
+        elif isinstance(m, torch.nn.LayerNorm):
+            torch.nn.init.constant_(m.bias, 0)
+            torch.nn.init.constant_(m.weight, 1.0)
+
+    for m in hr_gram_teacher.modules():
+        init_weights(m)
+
+    hr_gram_teacher.to(device)
+    logger.info(hr_gram_teacher)
+    return hr_gram_teacher
 
 
 def init_opt(

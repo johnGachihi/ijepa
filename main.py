@@ -23,6 +23,9 @@ parser.add_argument(
 parser.add_argument(
     '--devices', type=str, nargs='+', default=['cuda:0'],
     help='which devices to use on local machine')
+parser.add_argument(
+  '--debug', type=str, default='False',
+  help='run in single process to allow pdb debugging (True/False)')
 
 
 def process_main(rank, fname, world_size, devices):
@@ -55,11 +58,15 @@ def process_main(rank, fname, world_size, devices):
 if __name__ == '__main__':
     args = parser.parse_args()
 
-    num_gpus = len(args.devices)
-    mp.set_start_method('spawn')
+    if args.debug == 'True':
+        # For debugging - run single process
+        process_main(0, args.fname, 1, args.devices)
+    else:
+        num_gpus = len(args.devices)
+        mp.set_start_method('spawn')
 
-    for rank in range(num_gpus):
-        mp.Process(
-            target=process_main,
-            args=(rank, args.fname, num_gpus, args.devices)
-        ).start()
+        for rank in range(num_gpus):
+            mp.Process(
+                target=process_main,
+                args=(rank, args.fname, num_gpus, args.devices)
+            ).start()
