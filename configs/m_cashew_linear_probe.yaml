@@ -3,18 +3,18 @@ data:
   dataset_name: m-cashew-plantation
   batch_size: 64
   crop_size: 112
-  num_workers: 8
+  num_workers: 10
   pin_mem: true
   drop_last: true
 logging:
-  folder: logs/eval/m_cashew_linear_probe_pt
-  write_tag: m_cashew_linear_probe_pt
+  folder: logs/eval/m_cashew_linear_probe_lrmodel
+  write_tag: m_cashew_linear_probe_lrmodel
 meta:
   model_name: vit_small
   patch_size: 14
   load_checkpoint: false
   read_checkpoint: null
-  pretrained_checkpoint: /home/admin/john/SR4Seg/ijepa/logs/sr4seg/vit_small/sen2venus_sr_cross_attn_predictor_seg_pseudo_mask_ndvi_hrhr/sen2venus_ndvi_sr_cross_attn_predictor_seg_pseudo_mask_ndvi_hrhr-ep100.pth.tar
+  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_lr/jepa_sen2venus_lr-ep100.pth.tar
   use_bfloat16: true
   seg_n_cls: 7
   use_batchnorm: false

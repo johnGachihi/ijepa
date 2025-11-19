@@ -31,6 +31,7 @@ def make_m_cashew_plant_dataset(
     drop_last=True,
     pin_mem=True,
     num_workers=10,
+    persistent_workers=True,
     world_size=1,
     rank=0,
 ):
@@ -57,7 +58,7 @@ def make_m_cashew_plant_dataset(
     drop_last=drop_last,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=persistent_workers)
   logger.info('Train dataloader created')
 
   # Val
@@ -85,7 +86,7 @@ def make_m_cashew_plant_dataset(
     drop_last=False,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=persistent_workers)
   logger.info('Validation dataloader created')
 
   # Test
@@ -112,7 +113,7 @@ def make_m_cashew_plant_dataset(
     drop_last=False,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=persistent_workers)
   logger.info('Test dataloader created')
 
   return (
@@ -134,6 +135,7 @@ def make_m_sa_crop_type_dataset(
     drop_last=True,
     pin_mem=True,
     num_workers=10,
+    persistent_workers=True,
     world_size=1,
     rank=0,
 ):
@@ -146,7 +148,7 @@ def make_m_sa_crop_type_dataset(
     band_names=band_names,
     img_size=img_size
   )
-  logger.info('Train dataset created')
+  logger.info(f'Train dataset created. Num samples {len(train_dataset)}')
 
   train_dist_sampler = torch.utils.data.distributed.DistributedSampler(
     dataset=train_dataset,
@@ -160,8 +162,8 @@ def make_m_sa_crop_type_dataset(
     drop_last=drop_last,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
-  logger.info('Train dataloader created')
+    persistent_workers=persistent_workers)
+  logger.info(f'Train dataloader created. Num batches: {len(train_dataloader)}')
 
   # Val
   val_dataset = GeobenchDataset(
@@ -188,7 +190,7 @@ def make_m_sa_crop_type_dataset(
     drop_last=False,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=persistent_workers)
   logger.info('Validation dataloader created')
 
   # Test
@@ -215,7 +217,7 @@ def make_m_sa_crop_type_dataset(
     drop_last=False,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=persistent_workers)
   logger.info('Test dataloader created')
 
   return (
@@ -256,8 +258,7 @@ class GeobenchDataset(Dataset):
 
     assert dataset_name in ["m-SA-crop-type", "m-cashew-plantation"]
     # for cashew plant and SA crop type
-    # images are 256x256, we want 64x64
-    self.tiles_per_img = 16
+    # images are 256x256, no tiling
 
     for task in geobench.task_iterator(benchmark_name=benchmark_name):
       if task.dataset_name == dataset_name:
@@ -273,20 +274,18 @@ class GeobenchDataset(Dataset):
     ]
 
     self.band_indices = [original_band_names.index(band_name) for band_name in self.band_names]
-    self.active_indices = list(range(int(len(self.dataset) * self.tiles_per_img)))
+
+    # Cache normalization stats to avoid recomputing on every sample
+    self.norm_stats = self.dataset.normalization_stats()
 
   def __getitem__(self, idx):
-    dataset_idx = self.active_indices[idx]
-    img_idx = dataset_idx // self.tiles_per_img  # thanks Gabi / Marlena
-    label = self.dataset[img_idx].label
+    sample = self.dataset[idx]
+    label = sample.label
 
-    x = []
-    for band_idx in self.band_indices:
-      x.append(self.dataset[img_idx].bands[band_idx].data)
-
-    x = np.stack(x, axis=2)  # (h, w, C)
+    # Load bands directly without intermediate list
+    x = np.stack([sample.bands[band_idx].data for band_idx in self.band_indices], axis=2)  # (h, w, C)
     assert x.shape[-1] == len(self.band_names), f"Datasets must have {len(self.band_names)} channels, not {x.shape[-1]}"
-    x = torch.tensor(normalize_bands(x, norm_type=self.norm_operation, norm_stats=self.dataset.normalization_stats()))
+    x = torch.tensor(normalize_bands(x, norm_type=self.norm_operation, norm_stats=self.norm_stats))
 
     # check if label is an object or a number
     if not (isinstance(label, int) or isinstance(label, list)):
@@ -296,28 +295,6 @@ class GeobenchDataset(Dataset):
 
     target = torch.tensor(label, dtype=torch.long)
 
-    if self.tiles_per_img == 16:
-      # thanks Gabi / Marlena
-      # for cashew plant and SA crop type
-      subtiles_per_dim = 4
-      h = 256
-      assert h % subtiles_per_dim == 0
-      pixels_per_dim = h // subtiles_per_dim
-      subtile_idx = idx % self.tiles_per_img
-
-      row_idx = subtile_idx // subtiles_per_dim
-      col_idx = subtile_idx % subtiles_per_dim
-
-      x = x[
-          row_idx * pixels_per_dim: (row_idx + 1) * pixels_per_dim,
-          col_idx * pixels_per_dim: (col_idx + 1) * pixels_per_dim,
-          :,
-          ]
-
-      target = target[
-               row_idx * pixels_per_dim: (row_idx + 1) * pixels_per_dim,
-               col_idx * pixels_per_dim: (col_idx + 1) * pixels_per_dim,
-               ]
     if self.augmentation is not None:
       x, target = self.augmentation.apply(x, target)
 
@@ -336,7 +313,7 @@ class GeobenchDataset(Dataset):
     return x, target
 
   def __len__(self):
-    return int(len(self.active_indices))
+    return len(self.dataset)
 
 
 def normalize_bands(image, norm_type, norm_stats):
