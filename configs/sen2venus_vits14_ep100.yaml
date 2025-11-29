@@ -9,15 +9,15 @@ data:
   - 0.3
   - 1.0
   crop_size: 224
-  hr_crop_size: 448
+#  hr_crop_size: none
   num_workers: 10
   pin_mem: true
   use_color_distortion: false
   use_gaussian_blur: false
   use_horizontal_flip: false
 logging:
-  folder: logs/sen2venus_vits14.224-bs.128-ep.100_hr_gram/
-  write_tag: jepa_sen2venus_lr_hr_gram
+  folder: logs/sen2venus_vits14.224-bs.128-ep.100_lr
+  write_tag: jepa_sen2venus_lr
 mask:
   allow_overlap: false
   aspect_ratio:
@@ -41,12 +41,12 @@ meta:
   pred_emb_dim: 384
   read_checkpoint: null
   use_bfloat16: true
-  use_hr_gram_loss: true  # When true, loads both HR (Venus) and LR (Sentinel2) images from dataset
+  use_hr_gram_loss: false  # When true, loads both HR (Venus) and LR (Sentinel2) images from dataset
 optimization:
   ema:
   - 0.996
   - 1.0
-  epochs: 100
+  epochs: 300
   final_lr: 1.0e-06
   final_weight_decay: 0.4
   ipe_scale: 1.0

@@ -53,7 +53,7 @@ from src.transforms import make_transforms
 # --
 log_timings = True
 log_freq = 10
-checkpoint_freq = 50
+checkpoint_freq = 10  # 50
 # --
 
 _GLOBAL_SEED = 0
@@ -106,9 +106,11 @@ def main(args, resume_preempt=False):
     elif dataset_name == 'sen2venus':
         dataset_root = args['data']['dataset_root']
         splits_file_path = args['data']['splits_file_path']
-        use_hr_image = args['data'].get('use_hr_image', True)
+        use_hr_image = args['data'].get('use_hr_image', False)
         hr_crop_size = args['data'].get('hr_crop_size', None)
         load_both_images = use_hr_gram_loss  # Load both images when using hr_gram_loss
+        if not load_both_images:
+            assert hr_crop_size is None, "hr_crop_size should only be set when load_both_images is true"
         in_chans = 4  # RGB + NIR images
     # --
 
@@ -449,6 +451,8 @@ def main(args, resume_preempt=False):
                     h = forward_target()
                     if use_hr_gram_loss:
                         k = forward_hr_gram_teacher()
+                    else:
+                        k = None
                     z, ctx_emb = forward_context()
                     loss, ijepa_loss, gram_loss = loss_fn(z, h, ctx_emb, k)
 
@@ -494,23 +498,38 @@ def main(args, resume_preempt=False):
             def log_stats():
                 csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime)
                 if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
-                    logger.info('[%d, %5d] loss: %.3f '
-                                'ijepa loss: %.3f '
-                                'gram loss: %.3f '
-                                'masks: %.1f %.1f '
-                                '[wd: %.2e] [lr: %.2e] '
-                                '[mem: %.2e] '
-                                '(%.1f ms)'
-                                % (epoch + 1, itr,
-                                   loss_meter.avg,
-                                   ijepa_loss_meter.avg,
-                                   gram_loss_meter.avg,
-                                   maskA_meter.avg,
-                                   maskB_meter.avg,
-                                   _new_wd,
-                                   _new_lr,
-                                   torch.cuda.max_memory_allocated() / 1024.**2,
-                                   time_meter.avg))
+                    if use_hr_gram_loss:
+                        logger.info('[%d, %5d] loss: %.3f '
+                                    'ijepa loss: %.3f '
+                                    'gram loss: %.3f '
+                                    'masks: %.1f %.1f '
+                                    '[wd: %.2e] [lr: %.2e] '
+                                    '[mem: %.2e] '
+                                    '(%.1f ms)'
+                                    % (epoch + 1, itr,
+                                       loss_meter.avg,
+                                       ijepa_loss_meter.avg,
+                                       gram_loss_meter.avg,
+                                       maskA_meter.avg,
+                                       maskB_meter.avg,
+                                       _new_wd,
+                                       _new_lr,
+                                       torch.cuda.max_memory_allocated() / 1024.**2,
+                                       time_meter.avg))
+                    else:
+                        logger.info('[%d, %5d] loss: %.3f '
+                                    'masks: %.1f %.1f '
+                                    '[wd: %.2e] [lr: %.2e] '
+                                    '[mem: %.2e] '
+                                    '(%.1f ms)'
+                                    % (epoch + 1, itr,
+                                       loss_meter.avg,
+                                       maskA_meter.avg,
+                                       maskB_meter.avg,
+                                       _new_wd,
+                                       _new_lr,
+                                       torch.cuda.max_memory_allocated() / 1024. ** 2,
+                                       time_meter.avg))
 
                     if grad_stats is not None:
                         logger.info('[%d, %5d] grad_stats: [%.2e %.2e] (%.2e, %.2e)'
