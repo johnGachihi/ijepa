@@ -7,8 +7,8 @@ data:
   pin_mem: true
   drop_last: true
 logging:
-  folder: logs/eval/m_cashew_linear_probe_lrmodel_s224_ep200
-  write_tag: m_cashew_linear_probe_lrmodel_s224_ep200
+  folder: logs/eval/m_cashew_linear_probe_lrmodel_s224_ep200_2
+  write_tag: m_cashew_linear_probe_lrmodel_s224_ep200_2
 meta:
   model_name: vit_small
   patch_size: 14
