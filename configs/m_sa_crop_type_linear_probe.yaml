@@ -7,14 +7,14 @@ data:
   pin_mem: true
   drop_last: true
 logging:
-  folder: logs/eval/m_sa_crop_type_linear_probe_hrmodel_s224_ep300
-  write_tag: m_sa_crop_type_linear_probe_hrmodel_s224_ep300
+  folder: logs/eval/m_sa_crop_type_linear_probe_lrmodel_s224_ep200
+  write_tag: m_sa_crop_type_linear_probe_lrmodel_s224_ep200
 meta:
   model_name: vit_small
   patch_size: 14
-  load_checkpoint: true
+  load_checkpoint: false
   read_checkpoint: null
-  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_hr/jepa_sen2venus-ep300.pth.tar
+  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_lr/jepa_sen2venus_lr-ep200.pth.tar
   use_bfloat16: true
   seg_n_cls: 10
   use_batchnorm: false
