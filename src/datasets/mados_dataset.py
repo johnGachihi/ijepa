@@ -42,7 +42,7 @@ def make_mados_dataset(
     drop_last=drop_last,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=True)
   logger.info(f'Train dataloader created. No. batches: {len(train_dataloader)}')
 
   # Val
@@ -65,7 +65,7 @@ def make_mados_dataset(
     drop_last=False,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=True)
   logger.info(f'Validation dataloader created. No. batches: {len(val_dataloader)}')
 
   # Test
@@ -87,7 +87,7 @@ def make_mados_dataset(
     drop_last=False,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=True)
   logger.info(f'Test dataloader created. No. batches: {len(test_dataloader)}')
 
   return (

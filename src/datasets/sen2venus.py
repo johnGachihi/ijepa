@@ -55,7 +55,7 @@ def make_sen2venus_dataloader(
     drop_last=drop_last,
     pin_memory=pin_mem,
     num_workers=num_workers,
-    persistent_workers=False)
+    persistent_workers=True)
   logger.info('Sen2Venus dataloader created')
 
   return dataset, dataloader, dist_sampler

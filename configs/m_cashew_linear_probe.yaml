@@ -2,19 +2,19 @@ data:
   data_root: /home/admin/AGML_ResearchGroup/SuperResolution
   dataset_name: m-cashew-plantation
   batch_size: 64
-  crop_size: 112
+  crop_size: 224
   num_workers: 10
   pin_mem: true
   drop_last: true
 logging:
-  folder: logs/eval/m_cashew_linear_probe_lrmodel
-  write_tag: m_cashew_linear_probe_lrmodel
+  folder: logs/eval/m_cashew_linear_probe_lrmodel_s224_ep200
+  write_tag: m_cashew_linear_probe_lrmodel_s224_ep200
 meta:
   model_name: vit_small
   patch_size: 14
   load_checkpoint: false
   read_checkpoint: null
-  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_lr/jepa_sen2venus_lr-ep100.pth.tar
+  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_lr/jepa_sen2venus_lr-ep200.pth.tar
   use_bfloat16: true
   seg_n_cls: 7
   use_batchnorm: false

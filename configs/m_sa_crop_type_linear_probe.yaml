@@ -2,19 +2,19 @@ data:
   data_root: /home/admin/AGML_ResearchGroup/SuperResolution
   dataset_name: m-SA-crop-type
   batch_size: 64
-  crop_size: 112
-  num_workers: 8
+  crop_size: 224
+  num_workers: 10
   pin_mem: true
   drop_last: true
 logging:
-  folder: logs/eval/m_sa_crop_type_linear_probe_pt
-  write_tag: m_sa_crop_type_linear_probe_pt
+  folder: logs/eval/m_sa_crop_type_linear_probe_hrmodel_s224_ep300
+  write_tag: m_sa_crop_type_linear_probe_hrmodel_s224_ep300
 meta:
   model_name: vit_small
   patch_size: 14
-  load_checkpoint: false
+  load_checkpoint: true
   read_checkpoint: null
-  pretrained_checkpoint: /home/admin/john/SR4Seg/ijepa/logs/sr4seg/vit_small/sen2venus_ndvi_pseudo_mask_reapply_posembed_gsdpe_with_segdec_fix_res_lremb_predemb_no_sr_loss/seg_and_sr_sen2venus_ndvi_pseudo_mask_reapply_posembed_gsdpe_with_segdec_fix_res_lremb_predemb_no_sr_loss-ep100.pth.tar
+  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_hr/jepa_sen2venus-ep300.pth.tar
   use_bfloat16: true
   seg_n_cls: 10
   use_batchnorm: false
@@ -22,7 +22,7 @@ optimization:
   epochs: 100
   ipe_scale: 1.0
   lr: 0.001
-  start_lr: 0.001
+  start_lr: 0.0001
   final_lr: 1.0e-06
   warmup: 10
   weight_decay: 0.0
