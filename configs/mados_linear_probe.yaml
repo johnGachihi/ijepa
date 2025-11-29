@@ -7,14 +7,14 @@ data:
   pin_mem: true
   drop_last: true
 logging:
-  folder: logs/eval/mados_linear_probe_lrmodel_s224_ep200_2
-  write_tag: mados_linear_probe_lrmodel_s224_ep200_2
+  folder: logs/eval/mados_linear_probe_lrmodel_s224_ep300
+  write_tag: mados_linear_probe_lrmodel_s224_ep300
 meta:
   model_name: vit_small
   patch_size: 14
   load_checkpoint: false
   read_checkpoint: null
-  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_lr/jepa_sen2venus_lr-ep200.pth.tar
+  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_lr/jepa_sen2venus_lr-ep300.pth.tar
   use_bfloat16: true
   seg_n_cls: 15
   use_batchnorm: false
