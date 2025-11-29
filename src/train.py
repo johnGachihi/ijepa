@@ -79,7 +79,8 @@ def main(args, resume_preempt=False):
     copy_data = args['meta']['copy_data']
     pred_depth = args['meta']['pred_depth']
     pred_emb_dim = args['meta']['pred_emb_dim']
-    use_hr_gram_loss = args['meta'].get('use_hr_gram_loss')
+    use_hr_gram_loss = args['meta'].get('use_hr_gram_loss', False)
+    hr_gram_downsample_method = args['meta'].get('hr_gram_downsample_method', 'bilinear')  # bilinear, bicubic, learned
     if not torch.cuda.is_available():
         device = torch.device('cpu')
     else:
@@ -165,13 +166,24 @@ def main(args, resume_preempt=False):
         load_path = os.path.join(folder, r_file) if r_file is not None else latest_path
 
     # -- make csv_logger
-    csv_logger = CSVLogger(log_file,
-                           ('%d', 'epoch'),
-                           ('%d', 'itr'),
-                           ('%.5f', 'loss'),
-                           ('%.5f', 'mask-A'),
-                           ('%.5f', 'mask-B'),
-                           ('%d', 'time (ms)'))
+    if use_hr_gram_loss:
+        csv_logger = CSVLogger(log_file,
+                               ('%d', 'epoch'),
+                               ('%d', 'itr'),
+                               ('%.5f', 'loss'),
+                               ('%.5f', 'ijepa loss'),
+                               ('%.5f', 'gram loss'),
+                               ('%.5f', 'mask-A'),
+                               ('%.5f', 'mask-B'),
+                               ('%d', 'time (ms)'))
+    else:
+        csv_logger = CSVLogger(log_file,
+                               ('%d', 'epoch'),
+                               ('%d', 'itr'),
+                               ('%.5f', 'loss'),
+                               ('%.5f', 'mask-A'),
+                               ('%.5f', 'mask-B'),
+                               ('%d', 'time (ms)'))
 
     # -- init model
     encoder, predictor = init_model(
@@ -381,9 +393,9 @@ def main(args, resume_preempt=False):
                     return z, ctx_emb
 
                 def gram_loss_fn(z, k):
-                    # Downscale k (hr gram teacher output) to match z size using bilinear interpolation
+                    # Downscale k (hr gram teacher output) to match z size
                     if imgs.shape[-1] != hr_imgs.shape[-1]:
-                        # k has shape [B, 4*N, D]; downscale to [B, N, D]
+                        # k has shape [B, N*(scale_factor ** 2), D]; downscale to [B, N, D]
                         B, num_patches, D = k.shape
                         scale_factor = hr_crop_size // crop_size  # HR to LR scale factor
                         N = num_patches // (scale_factor ** 2)
@@ -397,13 +409,12 @@ def main(args, resume_preempt=False):
                         # Reshape to (B*N, D, scale_factor, scale_factor) for interpolation
                         k_reshaped = k_reshaped.reshape(B * N, D, scale_factor, scale_factor)
 
-                        # Apply bilinear interpolation to downscale 2x2 → 1x1
-                        k_interp = torch.nn.functional.interpolate(
-                            k_reshaped,
-                            size=(1, 1),
-                            mode='bilinear',
-                            align_corners=False
-                        )
+                        # Apply bilinear interpolation to downscale scale_factor x scale_factor → 1x1
+                        if hr_gram_downsample_method == 'bilinear' or hr_gram_downsample_method == 'bicubic':
+                            k_interp = torch.nn.functional.interpolate(
+                                k_reshaped, size=(1, 1), mode=hr_gram_downsample_method, align_corners=False)
+                        else:
+                            raise NotImplemented()
 
                         # Reshape back to (B, N, D)
                         k = k_interp.reshape(B, N, D)
@@ -496,7 +507,11 @@ def main(args, resume_preempt=False):
 
             # -- Logging
             def log_stats():
-                csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime)
+                if use_hr_gram_loss:
+                    csv_logger.log(epoch + 1, itr, loss, ijepa_loss, gram_loss, maskA_meter.val, maskB_meter.val, etime)
+                else:
+                    csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime)
+
                 if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
                     if use_hr_gram_loss:
                         logger.info('[%d, %5d] loss: %.3f '
