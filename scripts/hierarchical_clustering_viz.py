@@ -157,7 +157,7 @@ def apply_clustering_to_image(labels, num_patches_h, num_patches_w, patch_size, 
     return segmentation
 
 
-def reduce_to_2d(features, method='tsne', n_components=2, perplexity=100, random_state=42):
+def reduce_to_2d(features, method='tsne', n_components=2, perplexity=30, random_state=42):
     """Reduce high-dimensional features to 2D."""
     n_features = len(features)
     perplexity = min(perplexity, (n_features - 1) / 3)
