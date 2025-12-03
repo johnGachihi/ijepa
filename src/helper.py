@@ -12,6 +12,7 @@ import torch
 
 import src.models.vision_transformer as vit
 import src.models.linear_head as linear_head
+from src.models.util import DownsampleProjection
 from src.utils.schedulers import (
     WarmupCosineSchedule,
     CosineWDSchedule)
@@ -28,6 +29,7 @@ def load_checkpoint(
     predictor,
     target_encoder,
     hr_gram_teacher,
+    downsample_proj,
     opt,
     scaler,
 ):
@@ -57,6 +59,12 @@ def load_checkpoint(
             pretrained_dict = checkpoint['hr_gram_teacher']
             msg = hr_gram_teacher.load_state_dict(pretrained_dict)
             logger.info(f'loaded pretrained hr gram teacher from epoch {epoch} with msg: {msg}')
+
+        # -- loading downsample projection mlp
+        if downsample_proj is not None:
+            pretrained_dict = checkpoint['hr_gram_downsample_proj']
+            msg = downsample_proj.load_state_dict(pretrained_dict)
+            logger.info(f'loaded pretrained hr gram downsample proj from epoch {epoch} with msg: {msg}')
 
         # -- loading optimizer
         opt.load_state_dict(checkpoint['opt'])
@@ -118,7 +126,9 @@ def init_hr_gram_teacher(
     patch_size=16,
     model_name='vit_base',
     crop_size=224,
-    in_chans=3
+    in_chans=3,
+    include_downsample_proj=False,
+    scale_factor=2,
 ):
     hr_gram_teacher = vit.__dict__[model_name](
         img_size=[crop_size],
@@ -139,12 +149,23 @@ def init_hr_gram_teacher(
 
     hr_gram_teacher.to(device)
     logger.info(hr_gram_teacher)
-    return hr_gram_teacher
+
+    downsample_proj = None
+    if include_downsample_proj:
+        downsample_proj = DownsampleProjection(
+            in_dim=hr_gram_teacher.embed_dim * (scale_factor**2),
+            embed_dim=hr_gram_teacher.embed_dim,
+            bottleneck_dim=128
+        )
+        downsample_proj.to(device)
+
+    return hr_gram_teacher, downsample_proj
 
 
 def init_opt(
     encoder,
     predictor,
+    downsample_proj,
     iterations_per_epoch,
     start_lr,
     ref_lr,
@@ -175,6 +196,19 @@ def init_opt(
             'weight_decay': 0
         }
     ]
+
+    if downsample_proj is not None:
+        param_groups.extend([
+            {
+                'params': (p for n, p in downsample_proj.named_parameters()
+                           if ('bias' not in n) and (len(p.shape) != 1))
+            }, {
+                'params': (p for n, p in downsample_proj.named_parameters()
+                           if ('bias' in n) or (len(p.shape) == 1)),
+                'WD_exclude': True,
+                'weight_decay': 0
+            }
+        ])
 
     logger.info('Using AdamW')
     optimizer = torch.optim.AdamW(param_groups)

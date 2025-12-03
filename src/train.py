@@ -196,13 +196,15 @@ def main(args, resume_preempt=False):
         in_chans=in_chans)
     target_encoder = copy.deepcopy(encoder)
     hr_gram_teacher = None
+    downsample_proj = None
     if use_hr_gram_loss:
-        hr_gram_teacher = init_hr_gram_teacher(
+        hr_gram_teacher, downsample_proj = init_hr_gram_teacher(
             device=device,
             model_name=model_name,
             patch_size=patch_size,
             crop_size=hr_crop_size,  # Note: hr_crop_size not crop_size
-            in_chans=in_chans
+            in_chans=in_chans,
+            include_downsample_proj=hr_gram_downsample_method == 'learned'
         )
 
     # -- make data transforms
@@ -267,6 +269,7 @@ def main(args, resume_preempt=False):
     optimizer, scaler, scheduler, wd_scheduler = init_opt(
         encoder=encoder,
         predictor=predictor,
+        downsample_proj=downsample_proj,
         wd=wd,
         final_wd=final_wd,
         start_lr=start_lr,
@@ -291,6 +294,9 @@ def main(args, resume_preempt=False):
         encoder_state = {k: v for k, v in encoder_state.items() if 'pos_embed' not in k}
         hr_gram_teacher.module.load_state_dict(encoder_state, strict=False)
 
+        if downsample_proj is not None:
+            downsample_proj = DistributedDataParallel(downsample_proj)
+
 
     # -- momentum schedule
     momentum_scheduler = (ema[0] + i*(ema[1]-ema[0])/(ipe*num_epochs*ipe_scale)
@@ -306,6 +312,7 @@ def main(args, resume_preempt=False):
             predictor=predictor,
             target_encoder=target_encoder,
             hr_gram_teacher=hr_gram_teacher,
+            downsample_proj=downsample_proj,
             opt=optimizer,
             scaler=scaler)
         for _ in range(start_epoch*ipe):
@@ -320,6 +327,7 @@ def main(args, resume_preempt=False):
             'predictor': predictor.state_dict(),
             'target_encoder': target_encoder.state_dict(),
             'hr_gram_teacher': None if hr_gram_teacher is None else hr_gram_teacher.state_dict(),
+            'hr_gram_downsample_proj': None if downsample_proj is None else downsample_proj.state_dict(),
             'opt': optimizer.state_dict(),
             'scaler': None if scaler is None else scaler.state_dict(),
             'epoch': epoch,
@@ -400,24 +408,24 @@ def main(args, resume_preempt=False):
                         scale_factor = hr_crop_size // crop_size  # HR to LR scale factor
                         N = num_patches // (scale_factor ** 2)
 
-                        # Reshape to (B, N, scale_factor, scale_factor, D)
-                        k_reshaped = k.reshape(B, N, scale_factor, scale_factor, D)
-
-                        # Reshape to (B, N, D, scale_factor, scale_factor) for interpolation
-                        k_reshaped = k_reshaped.permute(0, 1, 4, 2, 3)
-
-                        # Reshape to (B*N, D, scale_factor, scale_factor) for interpolation
-                        k_reshaped = k_reshaped.reshape(B * N, D, scale_factor, scale_factor)
-
                         # Apply bilinear interpolation to downscale scale_factor x scale_factor → 1x1
                         if hr_gram_downsample_method == 'bilinear' or hr_gram_downsample_method == 'bicubic':
+                            # Reshape to (B, N, scale_factor, scale_factor, D)
+                            k_reshaped = (k.reshape(B, N, scale_factor, scale_factor, D)
+                                          .permute(0, 1, 4, 2, 3)  # (B, N, D, scale_factor, scale_factor)
+                                          .reshape(B * N, D, scale_factor, scale_factor)  # (B*N, D, scale_factor, scale_factor)
+                                          )
                             k_interp = torch.nn.functional.interpolate(
-                                k_reshaped, size=(1, 1), mode=hr_gram_downsample_method, align_corners=False)
+                                k_reshaped, size=(1, 1), mode=hr_gram_downsample_method, align_corners=False
+                            )  # (B*N, D, 1, 1)
+
+                            # Reshape back to (B, N, D)
+                            k = k_interp.reshape(B, N, D)
+                        elif hr_gram_downsample_method == 'learned':
+                            k_reshaped = k.reshape(B, N, -1)
+                            k = downsample_proj(k_reshaped)
                         else:
                             raise NotImplemented()
-
-                        # Reshape back to (B, N, D)
-                        k = k_interp.reshape(B, N, D)
 
                     output_feats = z.float()
                     target_feats = k.float()
