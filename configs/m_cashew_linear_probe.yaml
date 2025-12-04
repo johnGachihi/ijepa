@@ -7,14 +7,14 @@ data:
   pin_mem: true
   drop_last: true
 logging:
-  folder: logs/eval/m_cashew_linear_probe_hr_gram_bicubic_model_s224_ep300
-  write_tag: m_cashew_linear_probe_hr_gram_bicubic_model_s224_ep300
+  folder: logs/eval/m_cashew_linear_probe_hr_gram_learned_model_s224_ep100
+  write_tag: m_cashew_linear_probe
 meta:
   model_name: vit_small
   patch_size: 14
   load_checkpoint: false
   read_checkpoint: null
-  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_lr_bicubic/jepa_sen2venus_lr-ep300.pth.tar
+  pretrained_checkpoint: /home/admin/john/ijepa/logs/sen2venus_vits14.224-bs.128-ep.100_hr_gram_learned_downsampling/jepa_sen2venus-ep100.pth.tar
   use_bfloat16: true
   seg_n_cls: 7
   use_batchnorm: false
