@@ -43,6 +43,7 @@ from src.utils.logging import (
 from src.utils.tensors import repeat_interleave_batch
 from src.datasets.imagenet1k import make_imagenet1k
 from src.datasets.sen2venus import make_sen2venus_dataloader
+from src.datasets.rapidai4eo import make_rapidai4eo_dataloader
 
 from src.helper import (
     load_checkpoint,
@@ -105,6 +106,15 @@ def main(args, resume_preempt=False):
         image_folder = args['data']['image_folder']
         in_chans = 3  # RGB images
     elif dataset_name == 'sen2venus':
+        dataset_root = args['data']['dataset_root']
+        splits_file_path = args['data']['splits_file_path']
+        use_hr_image = args['data'].get('use_hr_image', False)
+        hr_crop_size = args['data'].get('hr_crop_size', None)
+        load_both_images = use_hr_gram_loss  # Load both images when using hr_gram_loss
+        if not load_both_images:
+            assert hr_crop_size is None, "hr_crop_size should only be set when load_both_images is true"
+        in_chans = 4  # RGB + NIR images
+    elif dataset_name == 'rapidai4eo':
         dataset_root = args['data']['dataset_root']
         splits_file_path = args['data']['splits_file_path']
         use_hr_image = args['data'].get('use_hr_image', False)
@@ -245,6 +255,23 @@ def main(args, resume_preempt=False):
 
     elif dataset_name == 'sen2venus':
         _, unsupervised_loader, unsupervised_sampler = make_sen2venus_dataloader(
+                data_root=dataset_root,
+                splits_file_path=splits_file_path,
+                split='train',
+                img_size=crop_size,
+                hr_img_size=hr_crop_size,
+                use_hr_image=use_hr_image,
+                load_both_images=load_both_images,
+                batch_size=batch_size,
+                collator=mask_collator,
+                drop_last=True,
+                pin_mem=pin_mem,
+                num_workers=num_workers,
+                world_size=world_size,
+                rank=rank)
+
+    elif dataset_name == 'rapidai4eo':
+        _, unsupervised_loader, unsupervised_sampler = make_rapidai4eo_dataloader(
                 data_root=dataset_root,
                 splits_file_path=splits_file_path,
                 split='train',

@@ -2,6 +2,9 @@ import json
 from pathlib import Path
 from typing import Optional
 
+import os
+os.environ['GEO_BENCH_DIR'] = '/home/admin/AGML_ResearchGroup/geo_bench'
+
 import geobench
 import numpy as np
 import torch.multiprocessing
@@ -260,7 +263,7 @@ class GeobenchDataset(Dataset):
     # for cashew plant and SA crop type
     # images are 256x256, no tiling
 
-    for task in geobench.task_iterator(benchmark_name=benchmark_name):
+    for task in geobench.task_iterator(benchmark_name=benchmark_name, benchmark_dir="/home/admin/AGML_ResearchGroup/geo_bench/segmentation_v0.9.1"):
       if task.dataset_name == dataset_name:
         break
 
