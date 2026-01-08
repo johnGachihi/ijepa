@@ -16,7 +16,7 @@ data:
   use_gaussian_blur: false
   use_horizontal_flip: false
 logging:
-  folder: logs/rapidai4eo_vits14.224-bs.128-ep.100_hr_gram
+  folder: logs/rapidai4eo_vits14.224-bs.128-ep.100_hr_gram_no_gsd_diff_corrected
   write_tag: jepa_rapidai4eo
 mask:
   allow_overlap: false

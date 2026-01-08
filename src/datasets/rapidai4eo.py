@@ -123,7 +123,7 @@ class RapidAI4EO(torch.utils.data.Dataset):
   def __getitem__(self, idx):
     with h5py.File(self.hdf5_file, "r") as data_full:
       # Planet has 4 bands, Sentinel-2 has 12 bands (take first 4: B, G, R, NIR)
-      planet_img = torch.from_numpy(data_full["planet"][self.indices[idx]].astype(np.float32))
+      planet_img = torch.from_numpy(data_full["sentinel2"][self.indices[idx]][:4].astype(np.float32))
       sentinel2_img = torch.from_numpy(data_full["sentinel2"][self.indices[idx]][:4].astype(np.float32))
 
     if self.img_size is not None:
@@ -142,7 +142,7 @@ class RapidAI4EO(torch.utils.data.Dataset):
 
     # normalize images
     if self.normalise:
-      planet_img = (planet_img - torch.tensor(self.PLANET_MEANS).view(-1, 1, 1)) / torch.tensor(self.PLANET_STDS).view(-1, 1, 1)  # todo: revert after experiment
+      planet_img = (planet_img - torch.tensor(self.SENTINEL2_MEANS).view(-1, 1, 1)) / torch.tensor(self.SENTINEL2_STDS).view(-1, 1, 1)  # todo: revert after experiment
       sentinel2_img = (sentinel2_img - torch.tensor(self.SENTINEL2_MEANS).view(-1, 1, 1)) / torch.tensor(self.SENTINEL2_STDS).view(-1, 1, 1)
 
     # Return selected image(s) based on load_both_images parameter
