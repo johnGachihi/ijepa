@@ -108,7 +108,7 @@ class Sen2Venus(torch.utils.data.Dataset):
 
   def __getitem__(self, idx):
     with h5py.File(self.hdf5_file, "r") as data_full:
-      venus_img = torch.from_numpy(data_full["venus"][self.indices[idx]])
+      venus_img = torch.from_numpy(data_full["sentinel2"][self.indices[idx]])  # TODO: revert after no-gsd-diff exp
       sentinel2_img = torch.from_numpy(data_full["sentinel2"][self.indices[idx]])
 
     if self.img_size is not None:
@@ -127,7 +127,7 @@ class Sen2Venus(torch.utils.data.Dataset):
 
     # normalize images
     if self.normalise:
-      venus_img = (venus_img - torch.tensor(self.VENUS_MEANS).view(-1, 1, 1)) / torch.tensor(self.VENUS_STDS).view(-1, 1, 1)
+      venus_img = (venus_img - torch.tensor(self.SENTINEL2_MEANS).view(-1, 1, 1)) / torch.tensor(self.SENTINEL2_STDS).view(-1, 1, 1)  # TODO: revert after no-gsd-diff exp
       sentinel2_img = (sentinel2_img - torch.tensor(self.SENTINEL2_MEANS).view(-1, 1, 1)) / torch.tensor(self.SENTINEL2_STDS).view(-1, 1, 1)
 
     # Return selected image(s) based on load_both_images parameter
