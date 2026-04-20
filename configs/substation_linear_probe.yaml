@@ -1,0 +1,29 @@
+data:
+  data_root: /home/admin/AGML_ResearchGroup/SuperResolution/substation
+  dataset_name: substation
+  batch_size: 64
+  crop_size: 224
+  num_workers: 10
+  pin_mem: true
+  drop_last: true
+logging:
+  folder: logs/eval/substation_sen2venus_hr_model_cweight_run1
+  write_tag: substation_linear_probe
+meta:
+  model_name: vit_small
+  patch_size: 14
+  load_checkpoint: true
+  read_checkpoint: null
+  pretrained_checkpoint: /home/admin/john/ijepa/logs/hr_model/jepa_sen2venus-ep300.pth.tar
+  use_bfloat16: true
+  seg_n_cls: 2
+  use_batchnorm: false
+optimization:
+  epochs: 100
+  ipe_scale: 1.0
+  lr: 0.001
+  start_lr: 0.0001
+  final_lr: 1.0e-06
+  warmup: 10
+  weight_decay: 0.0
+  final_weight_decay: 0.0

@@ -3,6 +3,7 @@ from src.datasets.geobench_dataset import (
     make_m_cashew_plant_dataset,
     make_m_sa_crop_type_dataset
 )
+from src.datasets.substation import make_substation_dataset
 
 
 def make_eval_dataloaders(
@@ -65,6 +66,10 @@ def make_eval_dataloaders(
             num_workers=num_workers,
             world_size=world_size,
             rank=rank,
+        )
+    elif dataset_name == "substation":
+        return make_substation_dataset(
+            data_root, batch_size, img_size, drop_last, pin_mem, num_workers, world_size, rank
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")

@@ -336,10 +336,17 @@ def main(args, resume_preempt=False):
 
                 def loss_fn(s):
                     # Segmentation loss
-                    seg_loss = F.cross_entropy(
-                        s.permute(0, 2, 3, 1).reshape(-1, s.shape[1]),
-                        masks.permute(0, 2, 3, 1).reshape(-1),
-                        ignore_index=-1)
+                    if dataset_name == 'substation':
+                        seg_loss = F.cross_entropy(
+                            s.permute(0, 2, 3, 1).reshape(-1, s.shape[1]),
+                            masks.permute(0, 2, 3, 1).reshape(-1),
+                            ignore_index=-1,
+                            weight=torch.tensor([1.0, 3.0], device=s.device))
+                    else:
+                        seg_loss = F.cross_entropy(
+                            s.permute(0, 2, 3, 1).reshape(-1, s.shape[1]),
+                            masks.permute(0, 2, 3, 1).reshape(-1),
+                            ignore_index=-1)
 
                     seg_loss = AllReduce.apply(seg_loss)
                     return seg_loss
@@ -437,10 +444,17 @@ def main(args, resume_preempt=False):
                     s = seg_head(h, im_size=o_size)
 
                     # Loss
-                    loss = F.cross_entropy(
-                        s.permute(0, 2, 3, 1).reshape(-1, s.shape[1]),
-                        masks.permute(0, 2, 3, 1).reshape(-1),
-                        ignore_index=-1)
+                    if dataset_name == 'substation':
+                        loss = F.cross_entropy(
+                            s.permute(0, 2, 3, 1).reshape(-1, s.shape[1]),
+                            masks.permute(0, 2, 3, 1).reshape(-1),
+                            ignore_index=-1,
+                            weight=torch.tensor([1.0, 3.0], device=s.device))
+                    else:
+                        loss = F.cross_entropy(
+                            s.permute(0, 2, 3, 1).reshape(-1, s.shape[1]),
+                            masks.permute(0, 2, 3, 1).reshape(-1),
+                            ignore_index=-1)
 
                     # mIoU
                     miou = multiclass_jaccard_index(
