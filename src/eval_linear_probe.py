@@ -16,6 +16,7 @@ import torch
 import torch.multiprocessing as mp
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel
+from torchmetrics.classification import MulticlassJaccardIndex
 from torchmetrics.functional.classification import multiclass_jaccard_index
 
 from src.datasets.helpers import make_eval_dataloaders
@@ -428,7 +429,7 @@ def main(args, resume_preempt=False):
         seg_head.eval()
 
         val_loss_meter = AverageMeter()
-        val_miou_meter = AverageMeter()
+        val_miou_metric = MulticlassJaccardIndex(num_classes=seg_n_cls, average="macro", ignore_index=-1).to(device)
 
         with torch.no_grad():
             for itr, (images, masks) in enumerate(val_loader):
@@ -456,25 +457,23 @@ def main(args, resume_preempt=False):
                             masks.permute(0, 2, 3, 1).reshape(-1),
                             ignore_index=-1)
 
-                    # mIoU
-                    miou = multiclass_jaccard_index(
+                    val_miou_metric.update(
                         s.permute(0, 2, 3, 1).reshape(-1, s.shape[1]),
                         masks.permute(0, 2, 3, 1).reshape(-1),
-                        num_classes=seg_n_cls,
-                        ignore_index=-1)
+                    )
 
                 val_loss_meter.update(float(loss))
-                val_miou_meter.update(float(miou))
 
-        logger.info(f'Validation - Loss: {val_loss_meter.avg:.4f}, mIoU: {val_miou_meter.avg:.4f}')
+        val_miou = val_miou_metric.compute().item()
+        logger.info(f'Validation - Loss: {val_loss_meter.avg:.4f}, mIoU: {val_miou:.4f}')
 
         # Log validation results to CSV
-        val_csv_logger.log(epoch + 1, val_loss_meter.avg, val_miou_meter.avg)
+        val_csv_logger.log(epoch + 1, val_loss_meter.avg, val_miou)
 
         # Save checkpoint
-        is_best = val_miou_meter.avg > best_val_miou
+        is_best = val_miou > best_val_miou
         if is_best:
-            best_val_miou = val_miou_meter.avg
+            best_val_miou = val_miou
         save_checkpoint(epoch + 1, is_best=is_best)
 
     # -- TEST LOOP
@@ -493,7 +492,7 @@ def main(args, resume_preempt=False):
         logger.info(f'Loaded best checkpoint for testing (mIoU: {checkpoint["best_val_miou"]:.4f})')
 
     test_loss_meter = AverageMeter()
-    test_miou_meter = AverageMeter()
+    test_miou_metric = MulticlassJaccardIndex(num_classes=seg_n_cls, average="macro", ignore_index=-1).to(device)
 
     with torch.no_grad():
         for itr, (images, masks) in enumerate(test_loader):
@@ -514,29 +513,27 @@ def main(args, resume_preempt=False):
                     masks.permute(0, 2, 3, 1).reshape(-1),
                     ignore_index=-1)
 
-                # mIoU
-                miou = multiclass_jaccard_index(
+                test_miou_metric.update(
                     s.permute(0, 2, 3, 1).reshape(-1, s.shape[1]),
                     masks.permute(0, 2, 3, 1).reshape(-1),
-                    num_classes=seg_n_cls,
-                    ignore_index=-1)
+                )
 
             test_loss_meter.update(float(loss))
-            test_miou_meter.update(float(miou))
 
             if itr % 50 == 0:
                 logger.info(f'Test [{itr}/{len(test_loader)}] '
-                           f'Loss: {test_loss_meter.avg:.4f} '
-                           f'mIoU: {test_miou_meter.avg:.4f}')
+                           f'Loss: {test_loss_meter.avg:.4f}')
+
+    test_miou = test_miou_metric.compute().item()
 
     logger.info('=' * 80)
     logger.info('FINAL TEST RESULTS:')
     logger.info(f'Test Loss: {test_loss_meter.avg:.4f}')
-    logger.info(f'Test mIoU: {test_miou_meter.avg:.4f}')
+    logger.info(f'Test mIoU: {test_miou:.4f}')
     logger.info('=' * 80)
 
     # Log test results to CSV
-    test_csv_logger.log(test_loss_meter.avg, test_miou_meter.avg)
+    test_csv_logger.log(test_loss_meter.avg, test_miou)
 
 
 if __name__ == "__main__":
