@@ -3,6 +3,7 @@ from src.datasets.geobench_dataset import (
     make_m_cashew_plant_dataset,
     make_m_sa_crop_type_dataset
 )
+from src.datasets.pastis import make_pastis_dataset
 from src.datasets.substation import make_substation_dataset
 
 
@@ -62,6 +63,18 @@ def make_eval_dataloaders(
         return make_m_sa_crop_type_dataset(
             batch_size=batch_size,
             partition="1.00x_train",
+            img_size=img_size,
+            tiles_per_img=tiles_per_img,
+            drop_last=drop_last,
+            pin_mem=pin_mem,
+            num_workers=num_workers,
+            world_size=world_size,
+            rank=rank,
+        )
+    elif dataset_name == "pastis":
+        return make_pastis_dataset(
+            data_root=data_root,
+            batch_size=batch_size,
             img_size=img_size,
             tiles_per_img=tiles_per_img,
             drop_last=drop_last,

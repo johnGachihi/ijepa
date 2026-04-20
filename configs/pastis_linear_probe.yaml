@@ -1,0 +1,30 @@
+data:
+  data_root: /home/admin/AGML_ResearchGroup/SuperResolution/pastis
+  dataset_name: pastis
+  batch_size: 64
+  crop_size: 224
+  num_workers: 10
+  pin_mem: true
+  drop_last: true
+  tiles_per_img: 4  # Split each 128x128 into 4 64x64 tiles (or 1 for full image)
+logging:
+  folder: logs/eval/pastis_linear_probe_tmp
+  write_tag: pastis_linear_probe
+meta:
+  model_name: vit_small
+  patch_size: 14
+  load_checkpoint: false
+  read_checkpoint: null
+  pretrained_checkpoint: /home/admin/john/ijepa/logs/hr_model/jepa_sen2venus-ep300.pth.tar
+  use_bfloat16: true
+  seg_n_cls: 18
+  use_batchnorm: false
+optimization:
+  epochs: 100
+  ipe_scale: 1.0
+  lr: 0.001
+  start_lr: 0.0001
+  final_lr: 1.0e-06
+  warmup: 10
+  weight_decay: 0.0
+  final_weight_decay: 0.0

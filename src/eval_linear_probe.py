@@ -162,9 +162,10 @@ def main(args, resume_preempt=False):
     ipe = len(train_loader)
 
     # Get number of input channels from dataset
+    # For multi-timestep inputs (e.g. PASTIS [B,T,C,H,W]), channel dim is axis 2; else axis 1
     in_chans = None
     for img, _ in train_loader:
-        in_chans = img.shape[1]
+        in_chans = img.shape[2] if img.dim() == 5 else img.shape[1]
         break
 
     # -- init encoder
@@ -324,13 +325,23 @@ def main(args, resume_preempt=False):
                 _new_wd = wd_scheduler.step()
 
                 def forward():
+                    # For multi-timestep inputs (e.g. PASTIS [B,T,C,H,W]): encode per-timestep, mean-pool over T
+                    if images.dim() == 5:
+                        B, T = images.shape[:2]
+                        enc_input = images.reshape(B * T, *images.shape[2:])
+                    else:
+                        B, T, enc_input = images.shape[0], 1, images
+
                     if eval_type == 'linear_probing':
                         with torch.no_grad():
                             # Get encoder features (frozen)
-                            h = encoder(images)
+                            h = encoder(enc_input)
                     else:  # finetuning
                         # Get encoder features (trainable)
-                        h = encoder(images)
+                        h = encoder(enc_input)
+
+                    if T > 1:
+                        h = h.reshape(B, T, *h.shape[1:]).mean(dim=1)
 
                     # Get segmentation predictions
                     o_size = (masks.shape[2], masks.shape[3])
@@ -439,8 +450,18 @@ def main(args, resume_preempt=False):
                 masks = masks.to(device, non_blocking=True)
 
                 with torch.cuda.amp.autocast(dtype=torch.bfloat16, enabled=use_bfloat16):
+                    # For multi-timestep inputs (e.g. PASTIS [B,T,C,H,W]): encode per-timestep, mean-pool over T
+                    if images.dim() == 5:
+                        B, T = images.shape[:2]
+                        enc_input = images.reshape(B * T, *images.shape[2:])
+                    else:
+                        B, T, enc_input = images.shape[0], 1, images
+
                     # Get encoder features
-                    h = encoder(images)
+                    h = encoder(enc_input)
+
+                    if T > 1:
+                        h = h.reshape(B, T, *h.shape[1:]).mean(dim=1)
 
                     # Get segmentation predictions
                     o_size = (masks.shape[2], masks.shape[3])
@@ -502,8 +523,18 @@ def main(args, resume_preempt=False):
             masks = masks.to(device, non_blocking=True)
 
             with torch.cuda.amp.autocast(dtype=torch.bfloat16, enabled=use_bfloat16):
+                # For multi-timestep inputs (e.g. PASTIS [B,T,C,H,W]): encode per-timestep, mean-pool over T
+                if images.dim() == 5:
+                    B, T = images.shape[:2]
+                    enc_input = images.reshape(B * T, *images.shape[2:])
+                else:
+                    B, T, enc_input = images.shape[0], 1, images
+
                 # Get encoder features
-                h = encoder(images)
+                h = encoder(enc_input)
+
+                if T > 1:
+                    h = h.reshape(B, T, *h.shape[1:]).mean(dim=1)
 
                 # Get segmentation predictions
                 o_size = (masks.shape[2], masks.shape[3])
