@@ -76,6 +76,7 @@ def main(args, resume_preempt=False):
     pin_mem = args['data']['pin_mem']
     num_workers = args['data']['num_workers']
     drop_last = args['data'].get('drop_last', False)
+    tiles_per_img = args['data'].get('tiles_per_img', 1)
 
     # -- OPTIMIZATION
     ipe_scale = args['optimization']['ipe_scale']
@@ -155,7 +156,8 @@ def main(args, resume_preempt=False):
         pin_mem=pin_mem,
         num_workers=num_workers,
         world_size=world_size,
-        rank=rank
+        rank=rank,
+        tiles_per_img=tiles_per_img,
     )
     ipe = len(train_loader)
 

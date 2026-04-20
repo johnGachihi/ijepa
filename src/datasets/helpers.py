@@ -16,6 +16,7 @@ def make_eval_dataloaders(
     num_workers=10,
     world_size=1,
     rank=0,
+    tiles_per_img=1,
 ):
     """
     Create train/val/test dataloaders for evaluation.
@@ -50,6 +51,7 @@ def make_eval_dataloaders(
             batch_size=batch_size,
             partition="1.00x_train",
             img_size=img_size,
+            tiles_per_img=tiles_per_img,
             drop_last=drop_last,
             pin_mem=pin_mem,
             num_workers=num_workers,
@@ -61,6 +63,7 @@ def make_eval_dataloaders(
             batch_size=batch_size,
             partition="1.00x_train",
             img_size=img_size,
+            tiles_per_img=tiles_per_img,
             drop_last=drop_last,
             pin_mem=pin_mem,
             num_workers=num_workers,

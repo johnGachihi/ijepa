@@ -6,6 +6,7 @@ data:
   num_workers: 10
   pin_mem: true
   drop_last: true
+  tiles_per_img: 16  # Split each 256x256 into N^2 non-overlapping tiles (1 = full image)
 logging:
   folder: logs/eval/m_sa_crop_type_linear_probe_hrgram_learned_model_s224_ep100
   write_tag: m_sa_crop_type_linear_probe
